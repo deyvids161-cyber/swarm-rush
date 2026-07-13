@@ -1,14 +1,30 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-  <meta name="theme-color" content="#07152f">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>Swarm Rush</title>
-  <link rel="stylesheet" href="style.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#07152f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Swarm Rush</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <canvas id="game" aria-label="Swarm Rush"></canvas>
-
-  <div
+<canvas id="game"></canvas>
+<div id="hud">
+  <div class="top">
+    <div class="badge blue">◆ <span id="gems">499</span></div>
+    <div class="badge gold">● <span id="coins">600</span></div>
+  </div>
+  <div id="message"></div>
+  <div id="count">10</div>
+  <button id="pause">Ⅱ</button>
+  <section id="panel">
+    <h1 id="title">SWARM RUSH</h1>
+    <p id="desc">Arraste para os lados, atravesse os multiplicadores e derrote a horda vermelha.</p>
+    <button id="play">ENTRAR NA PARTIDA</button>
+    <small>Controle por toque no iPhone.</small>
+  </section>
+</div>
+<script src="game.js"></script>
+</body>
+</html>
