@@ -17,10 +17,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup JDK
+      - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '25'
+          java-version: '17'
           distribution: 'microsoft'
 
       - name: Setup Gradle
@@ -28,11 +28,13 @@ jobs:
         with:
           gradle-version: current
 
-      - name: Restore project source
+      - name: Restore and verify project source
         shell: bash
         run: |
           set -euo pipefail
+          cat aegis_project.part00 aegis_project.part01 aegis_project.part02 aegis_project.part03 aegis_project.part04 > aegis_project.tar.gz.b64
           base64 -d aegis_project.tar.gz.b64 > aegis_project.tar.gz
+          echo 'f524eade7d2e89a59b7ca653d4acbeab3149a5360c3a4b58598c1bae41ce4251  aegis_project.tar.gz' | sha256sum -c -
           tar -xzf aegis_project.tar.gz
 
       - name: Decode resources
@@ -46,8 +48,14 @@ jobs:
       - name: Build
         run: gradle -p aegis-companion clean build --stacktrace --warning-mode all
 
-      - name: List artifacts
-        run: find aegis-companion/build/libs -maxdepth 1 -type f -printf '%f %s bytes\n'
+      - name: Verify output
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f aegis-companion/build/libs/Aegis_Companion_Fabric_1.20.1-0.5.0.jar
+          jar tf aegis-companion/build/libs/Aegis_Companion_Fabric_1.20.1-0.5.0.jar | grep -q 'br/com/aegiscompanion/entity/AegisEntity.class'
+          jar tf aegis-companion/build/libs/Aegis_Companion_Fabric_1.20.1-0.5.0.jar | grep -q 'fabric.mod.json'
+          find aegis-companion/build/libs -maxdepth 1 -type f -printf '%f %s bytes\n'
 
       - name: Upload JARs
         uses: actions/upload-artifact@v4
