@@ -3,6 +3,8 @@ name: Build Aegis Companion
 on:
   push:
     branches: [aegis-companion-dev]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
