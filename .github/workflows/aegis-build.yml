@@ -1,0 +1,85 @@
+name: Build Aegis Companion 0.6.0
+
+on:
+  push:
+    branches: [aegis-companion-dev]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK 21 for build tooling
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: microsoft
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: current
+
+      - name: Restore verified project
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '7459b0e2658c9f8c28138e3ea34959c7b5e7b0f45a377e3d06d9e030470cd907  aegis_v060_b64.part00' | sha256sum -c -
+          echo '0f4c9e0cf81c7b14ba5bd5e1c1027bdd3ae05257c5cb5e56c3f2124fd4a2f4aa  aegis_v060_b64.part01' | sha256sum -c -
+          echo '03abd00d6529fb57b5737d4b45b79aace19e5c38ce7477274c9e1a213d729cdd  aegis_v060_b64.part02' | sha256sum -c -
+          echo 'fc8114635a76510761ec354b68121102473cfd220f6a5aab0be39b8d436fb55a  aegis_v060_b64.part03' | sha256sum -c -
+          cat aegis_v060_b64.part00 aegis_v060_b64.part01 aegis_v060_b64.part02 aegis_v060_b64.part03 | tr -d '\r\n ' > aegis_v060_project.tar.gz.b64
+          base64 -d aegis_v060_project.tar.gz.b64 > aegis_v060_project.tar.gz
+          echo 'f4a0077b13eea7620a10205fdad5344127fa544c349d5d86fcffb3d50970da6b  aegis_v060_project.tar.gz' | sha256sum -c -
+          tar -tzf aegis_v060_project.tar.gz >/dev/null
+          tar -xzf aegis_v060_project.tar.gz
+          test -f aegis-companion/src/main/java/br/com/aegiscompanion/client/AegisControlScreen.java
+          test -f aegis-companion/src/main/java/br/com/aegiscompanion/network/AegisServerNetworking.java
+
+      - name: Validate resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m json.tool aegis-companion/src/main/resources/fabric.mod.json >/dev/null
+          python3 -m json.tool aegis-companion/src/main/resources/assets/aegis_companion/lang/pt_br.json >/dev/null
+          python3 -m json.tool aegis-companion/src/main/resources/assets/aegis_companion/lang/en_us.json >/dev/null
+
+      - name: Build Java 17 mod
+        run: gradle -p aegis-companion clean build --stacktrace --warning-mode all
+
+      - name: Verify JAR contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          JAR='aegis-companion/build/libs/Aegis_Companion_Fabric_1.20.1-0.6.0.jar'
+          test -f "$JAR"
+          jar tf "$JAR" | grep -q 'br/com/aegiscompanion/entity/AegisEntity.class'
+          jar tf "$JAR" | grep -q 'br/com/aegiscompanion/client/AegisControlScreen.class'
+          jar tf "$JAR" | grep -q 'br/com/aegiscompanion/network/AegisServerNetworking.class'
+          jar tf "$JAR" | grep -q 'fabric.mod.json'
+          javap -verbose -classpath "$JAR" br.com.aegiscompanion.AegisCompanionMod | grep -q 'major version: 61'
+          sha256sum "$JAR"
+          find aegis-companion/build/libs -maxdepth 1 -type f -printf '%f %s bytes\n'
+
+      - name: Package source project
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd aegis-companion && zip -qr ../Aegis_Companion_Fabric_1.20.1_v0.6.0_SOURCE_PROJECT.zip .)
+
+      - name: Upload release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aegis-Companion-Fabric-1.20.1-v0.6.0
+          path: |
+            aegis-companion/build/libs/Aegis_Companion_Fabric_1.20.1-0.6.0.jar
+            aegis-companion/build/libs/Aegis_Companion_Fabric_1.20.1-0.6.0-sources.jar
+            Aegis_Companion_Fabric_1.20.1_v0.6.0_SOURCE_PROJECT.zip
+          if-no-files-found: error
