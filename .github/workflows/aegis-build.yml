@@ -32,7 +32,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat aegis_project.part00 aegis_project.part01 aegis_project.part02 aegis_project.part03 aegis_project.part04 > aegis_project.tar.gz.b64
+          echo 'fc792fe9d444b84c0db8e1b045fbcc453e23db5e86e782e8dbf83c69a4b6454c  aegis_project.part00' | sha256sum -c -
+          echo '16d05d480d626ee2ad185b742598ebddcc9cc6e262a97f66ff99acc1eff51d31  aegis_project.part01' | sha256sum -c -
+          echo 'b468353b09d1d3be0e7fcb7c0f94bcc0a322e91f4b30ef763057f857408d2852  aegis_project.part02' | sha256sum -c -
+          echo 'f30c4b51b81755c589929e8dc6fb24f87a0a139581ce2dcfcfd35e547308aea9  aegis_project.part03' | sha256sum -c -
+          echo 'ba895f1b43b85d04b6f718893cc95ee29bceae150bc18139a80323bd6b99f56d  aegis_project.part04' | sha256sum -c -
+          cat aegis_project.part00 aegis_project.part01 aegis_project.part02 aegis_project.part03 aegis_project.part04 | tr -d '\r\n ' > aegis_project.tar.gz.b64
           base64 -d aegis_project.tar.gz.b64 > aegis_project.tar.gz
           echo 'f524eade7d2e89a59b7ca653d4acbeab3149a5360c3a4b58598c1bae41ce4251  aegis_project.tar.gz' | sha256sum -c -
           tar -xzf aegis_project.tar.gz
