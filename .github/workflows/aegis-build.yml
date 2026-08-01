@@ -49,6 +49,57 @@ jobs:
           echo 'f524eade7d2e89a59b7ca653d4acbeab3149a5360c3a4b58598c1bae41ce4251  aegis_project.tar.gz' | sha256sum -c -
           tar -xzf aegis_project.tar.gz
 
+      - name: Apply Minecraft 1.20.1 compatibility fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('aegis-companion/src/main/java/br/com/aegiscompanion/entity/AegisEntity.java')
+          s = p.read_text()
+          s = s.replace(
+              'import net.minecraft.world.inventory.ChestMenu;\n',
+              'import net.minecraft.world.inventory.ChestMenu;\nimport net.minecraft.world.inventory.MenuType;\n'
+          )
+          s = s.replace(
+              '    protected InteractionResult mobInteract(Player player, InteractionHand hand) {',
+              '    public InteractionResult mobInteract(Player player, InteractionHand hand) {'
+          )
+          s = s.replace(
+              '        return ChestMenu.twoRows(containerId, playerInventory, inventory);',
+              '        return new ChestMenu(MenuType.GENERIC_9x2, containerId, playerInventory, inventory, 2);'
+          )
+          pattern = re.compile(
+              r'            double radius = AegisConfig\.get\(\)\.guardRadius;\n'
+              r'            AABB box = new AABB\(aegis\.guardPos\)\.inflate\(radius\);\n'
+              r'            candidate = aegis\.level\(\)\.getNearestEntity\(Monster\.class, targetConditions, aegis,\n'
+              r'                    aegis\.getX\(\), aegis\.getEyeY\(\), aegis\.getZ\(\), box\);\n'
+              r'            return candidate != null && aegis\.canAttack\(candidate\);'
+          )
+          replacement = '''            double radius = AegisConfig.get().guardRadius;
+                      AABB box = new AABB(aegis.guardPos).inflate(radius);
+                      candidate = null;
+                      double nearestDistance = Double.MAX_VALUE;
+                      for (Monster monster : aegis.level().getEntitiesOfClass(
+                              Monster.class, box, monster -> monster.isAlive() && aegis.canAttack(monster))) {
+                          double distance = aegis.distanceToSqr(monster);
+                          if (distance < nearestDistance) {
+                              nearestDistance = distance;
+                              candidate = monster;
+                          }
+                      }
+                      return candidate != null;'''
+          s, count = pattern.subn(replacement, s)
+          if count != 1:
+              raise SystemExit(f'Guard target patch count was {count}, expected 1')
+          p.write_text(s)
+          PY
+          grep -n 'public InteractionResult mobInteract' aegis-companion/src/main/java/br/com/aegiscompanion/entity/AegisEntity.java
+          grep -n 'GENERIC_9x2' aegis-companion/src/main/java/br/com/aegiscompanion/entity/AegisEntity.java
+          grep -n 'getEntitiesOfClass' aegis-companion/src/main/java/br/com/aegiscompanion/entity/AegisEntity.java
+
       - name: Decode textures
         shell: bash
         run: |
