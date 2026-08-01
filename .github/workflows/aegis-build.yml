@@ -1,4 +1,4 @@
-name: Build Aegis Companion
+name: Build Aegis Companion 0.6.0
 
 on:
   push:
@@ -31,101 +31,48 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo 'bcff474fea92878c447bec2b849abfd707eccaa9e39ad5a364230b2afa243589  aegis_hex.part00' | sha256sum -c -
-          echo '11721802e6f99327059c473d19c88e40e6c4dff3c842c5109579a9e08ec0ab94  aegis_hex.part01' | sha256sum -c -
-          echo 'fae3df97a05233f5f1082b636dd721208643f329e5875bbcafb1e00ca4433b7f  aegis_hex.part02' | sha256sum -c -
-          echo 'fe5f4319acbda5b382a1ea351f13ed081873ad3df16d24403ded4af036d0d5a1  aegis_hex.part03' | sha256sum -c -
-          echo '7cf6462652f41fb48f1a81bb43581eca7ffafaf07d4f634bcb20fff1b2de39c5  aegis_hex.part04' | sha256sum -c -
-          echo 'b1ca318223aba0377a114b4e0a4e37266a1b12197b4713e213b7c2363af3601a  aegis_hex.part05' | sha256sum -c -
-          echo '269b74bd5fc305ce915ce7cc7bcf4085c653fa002c056726dc6ebf176810c3a9  aegis_hex.part06' | sha256sum -c -
-          echo '76d5a7a93b43b94746dd89db83a80958834a3fb93fb9bff5607a10d30567ee29  aegis_hex.part07' | sha256sum -c -
-          echo 'a7d7c0b8efad456c8b29b6b7c0dbd22368501b309067cb6175198e45286bbc10  aegis_hex.part08' | sha256sum -c -
-          echo '16f6b95dea68b03f973b2777981b857a7be2adcdd7e53b62c8ff0c6a3ea0fbf3  aegis_hex.part09' | sha256sum -c -
-          python3 - <<'PY'
-          from pathlib import Path
-          text = ''.join(Path(f'aegis_hex.part{i:02d}').read_text().strip() for i in range(10))
-          Path('aegis_project.tar.gz').write_bytes(bytes.fromhex(text))
-          PY
-          echo 'f524eade7d2e89a59b7ca653d4acbeab3149a5360c3a4b58598c1bae41ce4251  aegis_project.tar.gz' | sha256sum -c -
-          tar -xzf aegis_project.tar.gz
+          echo 'f4a0077b13eea7620a10205fdad5344127fa544c349d5d86fcffb3d50970da6b  aegis_v060_project.tar.gz' | sha256sum -c -
+          tar -xzf aegis_v060_project.tar.gz
+          test -f aegis-companion/src/main/java/br/com/aegiscompanion/client/AegisControlScreen.java
+          test -f aegis-companion/src/main/java/br/com/aegiscompanion/network/AegisServerNetworking.java
 
-      - name: Apply Minecraft 1.20.1 compatibility fixes
+      - name: Validate resources
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          p = Path('aegis-companion/src/main/java/br/com/aegiscompanion/entity/AegisEntity.java')
-          s = p.read_text()
-          s = s.replace(
-              'import net.minecraft.world.inventory.ChestMenu;\n',
-              'import net.minecraft.world.inventory.ChestMenu;\nimport net.minecraft.world.inventory.MenuType;\n'
-          )
-          s = s.replace(
-              '    protected InteractionResult mobInteract(Player player, InteractionHand hand) {',
-              '    public InteractionResult mobInteract(Player player, InteractionHand hand) {'
-          )
-          s = s.replace(
-              '        return ChestMenu.twoRows(containerId, playerInventory, inventory);',
-              '        return new ChestMenu(MenuType.GENERIC_9x2, containerId, playerInventory, inventory, 2);'
-          )
-          pattern = re.compile(
-              r'            double radius = AegisConfig\.get\(\)\.guardRadius;\n'
-              r'            AABB box = new AABB\(aegis\.guardPos\)\.inflate\(radius\);\n'
-              r'            candidate = aegis\.level\(\)\.getNearestEntity\(Monster\.class, targetConditions, aegis,\n'
-              r'                    aegis\.getX\(\), aegis\.getEyeY\(\), aegis\.getZ\(\), box\);\n'
-              r'            return candidate != null && aegis\.canAttack\(candidate\);'
-          )
-          replacement = '''            double radius = AegisConfig.get().guardRadius;
-                      AABB box = new AABB(aegis.guardPos).inflate(radius);
-                      candidate = null;
-                      double nearestDistance = Double.MAX_VALUE;
-                      for (Monster monster : aegis.level().getEntitiesOfClass(
-                              Monster.class, box, monster -> monster.isAlive() && aegis.canAttack(monster))) {
-                          double distance = aegis.distanceToSqr(monster);
-                          if (distance < nearestDistance) {
-                              nearestDistance = distance;
-                              candidate = monster;
-                          }
-                      }
-                      return candidate != null;'''
-          s, count = pattern.subn(replacement, s)
-          if count != 1:
-              raise SystemExit(f'Guard target patch count was {count}, expected 1')
-          p.write_text(s)
-          PY
-          grep -n 'public InteractionResult mobInteract' aegis-companion/src/main/java/br/com/aegiscompanion/entity/AegisEntity.java
-          grep -n 'GENERIC_9x2' aegis-companion/src/main/java/br/com/aegiscompanion/entity/AegisEntity.java
-          grep -n 'getEntitiesOfClass' aegis-companion/src/main/java/br/com/aegiscompanion/entity/AegisEntity.java
-
-      - name: Decode textures
-        shell: bash
-        run: |
-          set -euo pipefail
-          base64 -d aegis-companion/src/main/resources/assets/aegis_companion/icon.png.b64 > aegis-companion/src/main/resources/assets/aegis_companion/icon.png
-          base64 -d aegis-companion/src/main/resources/assets/aegis_companion/textures/entity/aegis.png.b64 > aegis-companion/src/main/resources/assets/aegis_companion/textures/entity/aegis.png
-          base64 -d aegis-companion/src/main/resources/assets/aegis_companion/textures/item/aegis_core.png.b64 > aegis-companion/src/main/resources/assets/aegis_companion/textures/item/aegis_core.png
+          python3 -m json.tool aegis-companion/src/main/resources/fabric.mod.json >/dev/null
+          python3 -m json.tool aegis-companion/src/main/resources/assets/aegis_companion/lang/pt_br.json >/dev/null
+          python3 -m json.tool aegis-companion/src/main/resources/assets/aegis_companion/lang/en_us.json >/dev/null
 
       - name: Build Java 17 mod
         run: gradle -p aegis-companion clean build --stacktrace --warning-mode all
 
-      - name: Verify JAR
+      - name: Verify JAR contents
         shell: bash
         run: |
           set -euo pipefail
-          JAR='aegis-companion/build/libs/Aegis_Companion_Fabric_1.20.1-0.5.0.jar'
+          JAR='aegis-companion/build/libs/Aegis_Companion_Fabric_1.20.1-0.6.0.jar'
           test -f "$JAR"
           jar tf "$JAR" | grep -q 'br/com/aegiscompanion/entity/AegisEntity.class'
+          jar tf "$JAR" | grep -q 'br/com/aegiscompanion/client/AegisControlScreen.class'
+          jar tf "$JAR" | grep -q 'br/com/aegiscompanion/network/AegisServerNetworking.class'
           jar tf "$JAR" | grep -q 'fabric.mod.json'
           javap -verbose -classpath "$JAR" br.com.aegiscompanion.AegisCompanionMod | grep -q 'major version: 61'
           sha256sum "$JAR"
           find aegis-companion/build/libs -maxdepth 1 -type f -printf '%f %s bytes\n'
 
-      - name: Upload JARs
+      - name: Package source project
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd aegis-companion && zip -qr ../Aegis_Companion_Fabric_1.20.1_v0.6.0_SOURCE_PROJECT.zip .)
+
+      - name: Upload release package
         uses: actions/upload-artifact@v4
         with:
-          name: Aegis-Companion-Fabric-1.20.1
-          path: aegis-companion/build/libs/*.jar
+          name: Aegis-Companion-Fabric-1.20.1-v0.6.0
+          path: |
+            aegis-companion/build/libs/Aegis_Companion_Fabric_1.20.1-0.6.0.jar
+            aegis-companion/build/libs/Aegis_Companion_Fabric_1.20.1-0.6.0-sources.jar
+            Aegis_Companion_Fabric_1.20.1_v0.6.0_SOURCE_PROJECT.zip
           if-no-files-found: error
