@@ -27,11 +27,17 @@ jobs:
         with:
           gradle-version: current
 
-      - name: Restore project
+      - name: Restore verified project
         shell: bash
         run: |
           set -euo pipefail
-          sha256sum aegis_v060_project.tar.gz
+          echo '7459b0e2658c9f8c28138e3ea34959c7b5e7b0f45a377e3d06d9e030470cd907  aegis_v060_b64.part00' | sha256sum -c -
+          echo '0f4c9e0cf81c7b14ba5bd5e1c1027bdd3ae05257c5cb5e56c3f2124fd4a2f4aa  aegis_v060_b64.part01' | sha256sum -c -
+          echo '03abd00d6529fb57b5737d4b45b79aace19e5c38ce7477274c9e1a213d729cdd  aegis_v060_b64.part02' | sha256sum -c -
+          echo 'fc8114635a76510761ec354b68121102473cfd220f6a5aab0be39b8d436fb55a  aegis_v060_b64.part03' | sha256sum -c -
+          cat aegis_v060_b64.part00 aegis_v060_b64.part01 aegis_v060_b64.part02 aegis_v060_b64.part03 | tr -d '\r\n ' > aegis_v060_project.tar.gz.b64
+          base64 -d aegis_v060_project.tar.gz.b64 > aegis_v060_project.tar.gz
+          echo 'f4a0077b13eea7620a10205fdad5344127fa544c349d5d86fcffb3d50970da6b  aegis_v060_project.tar.gz' | sha256sum -c -
           tar -tzf aegis_v060_project.tar.gz >/dev/null
           tar -xzf aegis_v060_project.tar.gz
           test -f aegis-companion/src/main/java/br/com/aegiscompanion/client/AegisControlScreen.java
