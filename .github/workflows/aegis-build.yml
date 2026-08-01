@@ -1,0 +1,55 @@
+name: Build Aegis Companion
+
+on:
+  push:
+    branches: [aegis-companion-dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'microsoft'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: current
+
+      - name: Restore project source
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d aegis_project.tar.gz.b64 > aegis_project.tar.gz
+          tar -xzf aegis_project.tar.gz
+
+      - name: Decode resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d aegis-companion/src/main/resources/assets/aegis_companion/icon.png.b64 > aegis-companion/src/main/resources/assets/aegis_companion/icon.png
+          base64 -d aegis-companion/src/main/resources/assets/aegis_companion/textures/entity/aegis.png.b64 > aegis-companion/src/main/resources/assets/aegis_companion/textures/entity/aegis.png
+          base64 -d aegis-companion/src/main/resources/assets/aegis_companion/textures/item/aegis_core.png.b64 > aegis-companion/src/main/resources/assets/aegis_companion/textures/item/aegis_core.png
+
+      - name: Build
+        run: gradle -p aegis-companion clean build --stacktrace --warning-mode all
+
+      - name: List artifacts
+        run: find aegis-companion/build/libs -maxdepth 1 -type f -printf '%f %s bytes\n'
+
+      - name: Upload JARs
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aegis-Companion-Fabric-1.20.1
+          path: aegis-companion/build/libs/*.jar
+          if-no-files-found: error
