@@ -16,10 +16,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup JDK 17
+      - name: Setup JDK 21 for build tooling
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: microsoft
 
       - name: Setup Gradle
@@ -57,7 +57,7 @@ jobs:
           base64 -d aegis-companion/src/main/resources/assets/aegis_companion/textures/entity/aegis.png.b64 > aegis-companion/src/main/resources/assets/aegis_companion/textures/entity/aegis.png
           base64 -d aegis-companion/src/main/resources/assets/aegis_companion/textures/item/aegis_core.png.b64 > aegis-companion/src/main/resources/assets/aegis_companion/textures/item/aegis_core.png
 
-      - name: Build
+      - name: Build Java 17 mod
         run: gradle -p aegis-companion clean build --stacktrace --warning-mode all
 
       - name: Verify JAR
@@ -68,6 +68,7 @@ jobs:
           test -f "$JAR"
           jar tf "$JAR" | grep -q 'br/com/aegiscompanion/entity/AegisEntity.class'
           jar tf "$JAR" | grep -q 'fabric.mod.json'
+          javap -verbose -classpath "$JAR" br.com.aegiscompanion.AegisCompanionMod | grep -q 'major version: 61'
           sha256sum "$JAR"
           find aegis-companion/build/libs -maxdepth 1 -type f -printf '%f %s bytes\n'
 
