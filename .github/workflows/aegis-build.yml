@@ -14,35 +14,42 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
-          distribution: 'microsoft'
+          distribution: microsoft
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: current
 
-      - name: Restore and verify project source
+      - name: Restore project
         shell: bash
         run: |
           set -euo pipefail
-          echo 'fc792fe9d444b84c0db8e1b045fbcc453e23db5e86e782e8dbf83c69a4b6454c  aegis_project.part00' | sha256sum -c -
-          echo '16d05d480d626ee2ad185b742598ebddcc9cc6e262a97f66ff99acc1eff51d31  aegis_project.part01' | sha256sum -c -
-          echo 'b468353b09d1d3be0e7fcb7c0f94bcc0a322e91f4b30ef763057f857408d2852  aegis_project.part02' | sha256sum -c -
-          echo 'f30c4b51b81755c589929e8dc6fb24f87a0a139581ce2dcfcfd35e547308aea9  aegis_project.part03' | sha256sum -c -
-          echo 'ba895f1b43b85d04b6f718893cc95ee29bceae150bc18139a80323bd6b99f56d  aegis_project.part04' | sha256sum -c -
-          cat aegis_project.part00 aegis_project.part01 aegis_project.part02 aegis_project.part03 aegis_project.part04 | tr -d '\r\n ' > aegis_project.tar.gz.b64
-          base64 -d aegis_project.tar.gz.b64 > aegis_project.tar.gz
+          echo 'bcff474fea92878c447bec2b849abfd707eccaa9e39ad5a364230b2afa243589  aegis_hex.part00' | sha256sum -c -
+          echo '11721802e6f99327059c473d19c88e40e6c4dff3c842c5109579a9e08ec0ab94  aegis_hex.part01' | sha256sum -c -
+          echo 'fae3df97a05233f5f1082b636dd721208643f329e5875bbcafb1e00ca4433b7f  aegis_hex.part02' | sha256sum -c -
+          echo 'fe5f4319acbda5b382a1ea351f13ed081873ad3df16d24403ded4af036d0d5a1  aegis_hex.part03' | sha256sum -c -
+          echo '7cf6462652f41fb48f1a81bb43581eca7ffafaf07d4f634bcb20fff1b2de39c5  aegis_hex.part04' | sha256sum -c -
+          echo 'b1ca318223aba0377a114b4e0a4e37266a1b12197b4713e213b7c2363af3601a  aegis_hex.part05' | sha256sum -c -
+          echo '269b74bd5fc305ce915ce7cc7bcf4085c653fa002c056726dc6ebf176810c3a9  aegis_hex.part06' | sha256sum -c -
+          echo '76d5a7a93b43b94746dd89db83a80958834a3fb93fb9bff5607a10d30567ee29  aegis_hex.part07' | sha256sum -c -
+          echo 'a7d7c0b8efad456c8b29b6b7c0dbd22368501b309067cb6175198e45286bbc10  aegis_hex.part08' | sha256sum -c -
+          echo '16f6b95dea68b03f973b2777981b857a7be2adcdd7e53b62c8ff0c6a3ea0fbf3  aegis_hex.part09' | sha256sum -c -
+          python3 - <<'PY'
+          from pathlib import Path
+          text = ''.join(Path(f'aegis_hex.part{i:02d}').read_text().strip() for i in range(10))
+          Path('aegis_project.tar.gz').write_bytes(bytes.fromhex(text))
+          PY
           echo 'f524eade7d2e89a59b7ca653d4acbeab3149a5360c3a4b58598c1bae41ce4251  aegis_project.tar.gz' | sha256sum -c -
           tar -xzf aegis_project.tar.gz
 
-      - name: Decode resources
+      - name: Decode textures
         shell: bash
         run: |
           set -euo pipefail
@@ -53,13 +60,15 @@ jobs:
       - name: Build
         run: gradle -p aegis-companion clean build --stacktrace --warning-mode all
 
-      - name: Verify output
+      - name: Verify JAR
         shell: bash
         run: |
           set -euo pipefail
-          test -f aegis-companion/build/libs/Aegis_Companion_Fabric_1.20.1-0.5.0.jar
-          jar tf aegis-companion/build/libs/Aegis_Companion_Fabric_1.20.1-0.5.0.jar | grep -q 'br/com/aegiscompanion/entity/AegisEntity.class'
-          jar tf aegis-companion/build/libs/Aegis_Companion_Fabric_1.20.1-0.5.0.jar | grep -q 'fabric.mod.json'
+          JAR='aegis-companion/build/libs/Aegis_Companion_Fabric_1.20.1-0.5.0.jar'
+          test -f "$JAR"
+          jar tf "$JAR" | grep -q 'br/com/aegiscompanion/entity/AegisEntity.class'
+          jar tf "$JAR" | grep -q 'fabric.mod.json'
+          sha256sum "$JAR"
           find aegis-companion/build/libs -maxdepth 1 -type f -printf '%f %s bytes\n'
 
       - name: Upload JARs
