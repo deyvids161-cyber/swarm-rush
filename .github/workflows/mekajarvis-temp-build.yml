@@ -28,8 +28,12 @@ jobs:
         with:
           gradle-version: '8.8'
 
-      - name: Extract project
-        run: unzip -q mekajarvis-ci/MekaJarvis-source.zip
+      - name: Reconstruct and extract project
+        shell: bash
+        run: |
+          cat mekajarvis-ci/source.part-* | tr -d '\n' | base64 --decode > /tmp/MekaJarvis-source.zip
+          echo 'd0fdd73a7879ec82003e41522e5c86d587e1947b4ac516802a5e45334a2bbd5e  /tmp/MekaJarvis-source.zip' | sha256sum --check
+          unzip -q /tmp/MekaJarvis-source.zip
 
       - name: Configure public mod dependencies
         shell: bash
