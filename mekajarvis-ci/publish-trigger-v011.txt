@@ -1,0 +1,1 @@
+Trigger artifact publisher for MekaJarvis 0.1.1
