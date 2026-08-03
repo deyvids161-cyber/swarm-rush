@@ -1,0 +1,144 @@
+name: MekaJarvis Temporary Build
+
+on:
+  push:
+    branches: [mekajarvis-build-temp-20260803]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout temporary source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.8
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.8'
+
+      - name: Extract project
+        run: unzip -q mekajarvis-ci/MekaJarvis-source.zip
+
+      - name: Configure public mod dependencies
+        shell: bash
+        run: |
+          cat > MekaJarvis-Forge-1.20.1/build.gradle <<'GRADLE'
+          plugins {
+              id 'eclipse'
+              id 'idea'
+              id 'maven-publish'
+              id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+          }
+
+          version = mod_version
+          group = mod_group_id
+
+          base {
+              archivesName = "${mod_id}-${minecraft_version}"
+          }
+
+          java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+          minecraft {
+              mappings channel: 'official', version: minecraft_version
+              copyIdeResources = true
+          }
+
+          repositories {
+              mavenCentral()
+              maven {
+                  url = 'https://www.cursemaven.com'
+                  content { includeGroup 'curse.maven' }
+              }
+          }
+
+          dependencies {
+              minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+              implementation fg.deobf("curse.maven:architectury-api-419699:5137938")
+              implementation fg.deobf("curse.maven:playerengine-1322604:8454560")
+              implementation fg.deobf("curse.maven:player2npc-1322607:8454569")
+              implementation fg.deobf("curse.maven:mekanism-268560:6552911")
+              implementation fg.deobf("curse.maven:mekanism-generators-268566:6552914")
+          }
+
+          tasks.named('processResources', ProcessResources).configure {
+              var replaceProperties = [
+                      minecraft_version: minecraft_version,
+                      forge_version: forge_version,
+                      mod_id: mod_id,
+                      mod_name: mod_name,
+                      mod_version: mod_version
+              ]
+              inputs.properties replaceProperties
+              filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+                  expand replaceProperties + [project: project]
+              }
+          }
+
+          tasks.withType(JavaCompile).configureEach {
+              options.encoding = 'UTF-8'
+          }
+
+          jar {
+              manifest {
+                  attributes([
+                          'Specification-Title'     : mod_id,
+                          'Specification-Vendor'    : 'Deyvid Santos Matos',
+                          'Specification-Version'   : '1',
+                          'Implementation-Title'    : project.name,
+                          'Implementation-Version'  : project.jar.archiveVersion,
+                          'Implementation-Vendor'   : 'Deyvid Santos Matos'
+                  ])
+              }
+              finalizedBy 'reobfJar'
+          }
+          GRADLE
+
+      - name: Build reobfuscated Forge jar
+        working-directory: MekaJarvis-Forge-1.20.1
+        run: gradle clean build --stacktrace --no-daemon
+
+      - name: Validate jar contents
+        working-directory: MekaJarvis-Forge-1.20.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          JAR_FILE=$(find build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-sources.jar' | head -n 1)
+          test -n "$JAR_FILE"
+          jar tf "$JAR_FILE" | grep -q 'META-INF/mods.toml'
+          jar tf "$JAR_FILE" | grep -q 'com/deyvid/mekajarvis/MekaJarvisMod.class'
+          cp "$JAR_FILE" build/libs/MekaJarvis-Forge-1.20.1-0.1.0.jar
+          sha256sum build/libs/MekaJarvis-Forge-1.20.1-0.1.0.jar > build/libs/MekaJarvis-Forge-1.20.1-0.1.0.jar.sha256
+
+      - name: Upload compiled jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: MekaJarvis-Forge-1.20.1-0.1.0
+          path: |
+            MekaJarvis-Forge-1.20.1/build/libs/MekaJarvis-Forge-1.20.1-0.1.0.jar
+            MekaJarvis-Forge-1.20.1/build/libs/MekaJarvis-Forge-1.20.1-0.1.0.jar.sha256
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MekaJarvis-build-diagnostics
+          path: |
+            MekaJarvis-Forge-1.20.1/build/reports/
+            MekaJarvis-Forge-1.20.1/build/tmp/
+          if-no-files-found: ignore
+          retention-days: 1
