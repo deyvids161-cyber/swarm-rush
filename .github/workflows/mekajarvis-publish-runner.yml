@@ -36,15 +36,20 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re, subprocess, textwrap
+
           workflow = Path('.github/workflows/mekajarvis-temp-build.yml').read_text(encoding='utf-8')
           blocks = re.split(r'(?m)^      - name: ', workflow)[1:]
           executed = 0
           for block in blocks:
               name = block.splitlines()[0].strip()
-              match = re.search(r'(?ms)^        run: \|\n(.*?)(?=^      - name: |\Z)', block)
-              if not match:
+              block_run = re.search(r'(?ms)^        run: \|\n(.*)\Z', block)
+              inline_run = re.search(r'(?m)^        run:\s*(.+)$', block)
+              if block_run:
+                  script = textwrap.dedent(block_run.group(1))
+              elif inline_run:
+                  script = inline_run.group(1).strip()
+              else:
                   continue
-              script = textwrap.dedent(match.group(1))
               cwd_match = re.search(r'(?m)^        working-directory: (.+)$', block)
               cwd = cwd_match.group(1).strip() if cwd_match else '.'
               print(f'::group::{name}')
