@@ -1,10 +1,8 @@
-name: MekaJarvis Temporary Build
+name: MekaJarvis Fix Build 0.1.1
 
 on:
   push:
-    branches: [mekajarvis-build-temp-20260803]
-  pull_request:
-    branches: [main]
+    branches: [mekajarvis-fix-v011-build]
 
 permissions:
   contents: read
@@ -14,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout temporary source
+      - name: Checkout validated source bundle
         uses: actions/checkout@v4
 
       - name: Set up Java 17
@@ -28,14 +26,140 @@ jobs:
         with:
           gradle-version: '8.8'
 
-      - name: Reconstruct and extract project
+      - name: Reconstruct validated source
         shell: bash
         run: |
           cat mekajarvis-ci/source.part-* | tr -d '\n' | base64 --decode > /tmp/MekaJarvis-source.zip
           echo 'd0fdd73a7879ec82003e41522e5c86d587e1947b4ac516802a5e45334a2bbd5e  /tmp/MekaJarvis-source.zip' | sha256sum --check
           unzip -q /tmp/MekaJarvis-source.zip
 
-      - name: Configure public mod dependencies
+      - name: Apply world-entry crash protection
+        shell: bash
+        run: |
+          cat > MekaJarvis-Forge-1.20.1/src/main/java/com/deyvid/mekajarvis/MekaJarvisMod.java <<'JAVA'
+          package com.deyvid.mekajarvis;
+
+          import com.mojang.logging.LogUtils;
+          import net.minecraft.server.MinecraftServer;
+          import net.minecraftforge.common.MinecraftForge;
+          import net.minecraftforge.event.RegisterCommandsEvent;
+          import net.minecraftforge.event.TickEvent;
+          import net.minecraftforge.eventbus.api.SubscribeEvent;
+          import net.minecraftforge.fml.common.Mod;
+          import net.minecraftforge.server.ServerLifecycleHooks;
+          import org.slf4j.Logger;
+
+          @Mod(MekaJarvisMod.MOD_ID)
+          public final class MekaJarvisMod {
+              public static final String MOD_ID = "mekajarvis";
+              public static final Logger LOGGER = LogUtils.getLogger();
+
+              public MekaJarvisMod() {
+                  MinecraftForge.EVENT_BUS.register(this);
+                  LOGGER.info("MekaJarvis 0.1.1 carregado: integracao Player2NPC + Mekanism");
+              }
+
+              @SubscribeEvent
+              public void onRegisterCommands(RegisterCommandsEvent event) {
+                  try {
+                      MekaJarvisCommands.register(event.getDispatcher());
+                  } catch (Throwable error) {
+                      LOGGER.error("MekaJarvis nao conseguiu registrar os comandos. O mundo continuara carregando.", error);
+                  }
+              }
+
+              @SubscribeEvent
+              public void onServerTick(TickEvent.ServerTickEvent event) {
+                  if (event.phase != TickEvent.Phase.END) {
+                      return;
+                  }
+                  MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+                  if (server == null) {
+                      return;
+                  }
+                  try {
+                      MekaJarvisJobManager.tick(server);
+                  } catch (Throwable error) {
+                      LOGGER.error("Erro protegido no tick do MekaJarvis; o mundo continuara aberto.", error);
+                      MekaJarvisJobManager.abortAll("erro interno protegido: " + error.getClass().getSimpleName());
+                  }
+              }
+          }
+          JAVA
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('MekaJarvis-Forge-1.20.1/src/main/java/com/deyvid/mekajarvis/MekaJarvisJobManager.java')
+          s = p.read_text(encoding='utf-8')
+          old = '''    public static void tick(MinecraftServer server) {
+                  for (BuildJob job : new ArrayList<>(JOBS.values())) {
+                      job.tick(server);
+                  }
+              }
+          '''
+          new = '''    public static void tick(MinecraftServer server) {
+                  for (BuildJob job : new ArrayList<>(JOBS.values())) {
+                      try {
+                          job.tick(server);
+                      } catch (Throwable error) {
+                          job.abortSafely(server, error);
+                      }
+                  }
+              }
+
+              public static void abortAll(String reason) {
+                  for (BuildJob job : new ArrayList<>(JOBS.values())) {
+                      job.abortWithoutController(reason);
+                  }
+              }
+          '''
+          if old not in s:
+              raise SystemExit('Bloco tick esperado nao encontrado')
+          s = s.replace(old, new)
+          old = '''        private void fail(ServerPlayer owner, String reason) {
+                      phase = Phase.FAILED;
+                      failure = reason == null || reason.isBlank() ? "erro desconhecido" : reason;
+                      controller.reportAgenticProgress("MekaJarvis falhou: " + failure, true);
+                      owner.sendSystemMessage(Component.literal("MekaJarvis: falha — " + failure));
+                  }
+          '''
+          new = '''        private void fail(ServerPlayer owner, String reason) {
+                      phase = Phase.FAILED;
+                      failure = reason == null || reason.isBlank() ? "erro desconhecido" : reason;
+                      try {
+                          controller.reportAgenticProgress("MekaJarvis falhou: " + failure, true);
+                      } catch (Throwable ignored) {
+                      }
+                      owner.sendSystemMessage(Component.literal("MekaJarvis: falha — " + failure));
+                  }
+
+                  private void abortSafely(MinecraftServer server, Throwable error) {
+                      String message = error.getMessage();
+                      String reason = "erro interno protegido: " + error.getClass().getSimpleName()
+                              + (message == null || message.isBlank() ? "" : " — " + message);
+                      ServerPlayer owner = server.getPlayerList().getPlayer(ownerId);
+                      if (owner != null) {
+                          fail(owner, reason);
+                      } else {
+                          abortWithoutController(reason);
+                      }
+                      MekaJarvisMod.LOGGER.error("Projeto MekaJarvis abortado sem fechar o mundo.", error);
+                  }
+
+                  private void abortWithoutController(String reason) {
+                      phase = Phase.FAILED;
+                      failure = reason == null || reason.isBlank() ? "erro interno protegido" : reason;
+                  }
+          '''
+          if old not in s:
+              raise SystemExit('Bloco fail esperado nao encontrado')
+          p.write_text(s.replace(old, new), encoding='utf-8')
+          PY
+
+          sed -i 's/forge_version=47.4.0/forge_version=47.1.1/' MekaJarvis-Forge-1.20.1/gradle.properties
+          sed -i 's/mod_version=0.1.0/mod_version=0.1.1/' MekaJarvis-Forge-1.20.1/gradle.properties
+
+      - name: Configure public dependencies
         shell: bash
         run: |
           cat > MekaJarvis-Forge-1.20.1/build.gradle <<'GRADLE'
@@ -45,21 +169,14 @@ jobs:
               id 'maven-publish'
               id 'net.minecraftforge.gradle' version '[6.0,6.2)'
           }
-
           version = mod_version
           group = mod_group_id
-
-          base {
-              archivesName = "${mod_id}-${minecraft_version}"
-          }
-
+          base { archivesName = "${mod_id}-${minecraft_version}" }
           java.toolchain.languageVersion = JavaLanguageVersion.of(17)
-
           minecraft {
               mappings channel: 'official', version: minecraft_version
               copyIdeResources = true
           }
-
           repositories {
               mavenCentral()
               maven {
@@ -67,7 +184,6 @@ jobs:
                   content { includeGroup 'curse.maven' }
               }
           }
-
           dependencies {
               minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
               implementation fg.deobf("curse.maven:architectury-api-419699:5137938")
@@ -76,45 +192,35 @@ jobs:
               implementation fg.deobf("curse.maven:mekanism-268560:6552911")
               implementation fg.deobf("curse.maven:mekanism-generators-268566:6552914")
           }
-
           tasks.named('processResources', ProcessResources).configure {
-              var replaceProperties = [
-                      minecraft_version: minecraft_version,
-                      forge_version: forge_version,
-                      mod_id: mod_id,
-                      mod_name: mod_name,
-                      mod_version: mod_version
-              ]
-              inputs.properties replaceProperties
+              var props = [minecraft_version: minecraft_version, forge_version: forge_version,
+                           mod_id: mod_id, mod_name: mod_name, mod_version: mod_version]
+              inputs.properties props
               filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
-                  expand replaceProperties + [project: project]
+                  expand props + [project: project]
               }
           }
-
-          tasks.withType(JavaCompile).configureEach {
-              options.encoding = 'UTF-8'
-          }
-
+          tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
           jar {
               manifest {
                   attributes([
-                          'Specification-Title'     : mod_id,
-                          'Specification-Vendor'    : 'Deyvid Santos Matos',
-                          'Specification-Version'   : '1',
-                          'Implementation-Title'    : project.name,
-                          'Implementation-Version'  : project.jar.archiveVersion,
-                          'Implementation-Vendor'   : 'Deyvid Santos Matos'
+                      'Specification-Title': mod_id,
+                      'Specification-Vendor': 'Deyvid Santos Matos',
+                      'Specification-Version': '1',
+                      'Implementation-Title': project.name,
+                      'Implementation-Version': project.jar.archiveVersion,
+                      'Implementation-Vendor': 'Deyvid Santos Matos'
                   ])
               }
               finalizedBy 'reobfJar'
           }
           GRADLE
 
-      - name: Build reobfuscated Forge jar
+      - name: Build against minimum Forge 47.1.1
         working-directory: MekaJarvis-Forge-1.20.1
         run: gradle clean build --stacktrace --no-daemon
 
-      - name: Validate jar contents
+      - name: Validate compatibility and jar
         working-directory: MekaJarvis-Forge-1.20.1
         shell: bash
         run: |
@@ -123,26 +229,18 @@ jobs:
           test -n "$JAR_FILE"
           jar tf "$JAR_FILE" | grep -q 'META-INF/mods.toml'
           jar tf "$JAR_FILE" | grep -q 'com/deyvid/mekajarvis/MekaJarvisMod.class'
-          cp "$JAR_FILE" build/libs/MekaJarvis-Forge-1.20.1-0.1.0.jar
-          sha256sum build/libs/MekaJarvis-Forge-1.20.1-0.1.0.jar > build/libs/MekaJarvis-Forge-1.20.1-0.1.0.jar.sha256
+          javap -classpath "$JAR_FILE" -c -p com.deyvid.mekajarvis.MekaJarvisMod > /tmp/mekajarvis-javap.txt
+          ! grep -q 'TickEvent\$ServerTickEvent.getServer' /tmp/mekajarvis-javap.txt
+          grep -q 'ServerLifecycleHooks.getCurrentServer' /tmp/mekajarvis-javap.txt
+          cp "$JAR_FILE" build/libs/MekaJarvis-Forge-1.20.1-0.1.1.jar
+          sha256sum build/libs/MekaJarvis-Forge-1.20.1-0.1.1.jar > build/libs/MekaJarvis-Forge-1.20.1-0.1.1.jar.sha256
 
-      - name: Upload compiled jar
+      - name: Upload fixed jar
         uses: actions/upload-artifact@v4
         with:
-          name: MekaJarvis-Forge-1.20.1-0.1.0
+          name: MekaJarvis-Forge-1.20.1-0.1.1
           path: |
-            MekaJarvis-Forge-1.20.1/build/libs/MekaJarvis-Forge-1.20.1-0.1.0.jar
-            MekaJarvis-Forge-1.20.1/build/libs/MekaJarvis-Forge-1.20.1-0.1.0.jar.sha256
+            MekaJarvis-Forge-1.20.1/build/libs/MekaJarvis-Forge-1.20.1-0.1.1.jar
+            MekaJarvis-Forge-1.20.1/build/libs/MekaJarvis-Forge-1.20.1-0.1.1.jar.sha256
           if-no-files-found: error
-          retention-days: 1
-
-      - name: Upload build diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: MekaJarvis-build-diagnostics
-          path: |
-            MekaJarvis-Forge-1.20.1/build/reports/
-            MekaJarvis-Forge-1.20.1/build/tmp/
-          if-no-files-found: ignore
           retention-days: 1
