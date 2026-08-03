@@ -1,0 +1,63 @@
+name: MekaJarvis PR Runner
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.8
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.8'
+
+      - name: Execute validated build steps
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, subprocess, textwrap
+
+          workflow = Path('.github/workflows/mekajarvis-temp-build.yml').read_text(encoding='utf-8')
+          blocks = re.split(r'(?m)^      - name: ', workflow)[1:]
+          executed = 0
+          for block in blocks:
+              name = block.splitlines()[0].strip()
+              match = re.search(r'(?ms)^        run: \|\n(.*?)(?=^      - name: |\Z)', block)
+              if not match:
+                  continue
+              script = textwrap.dedent(match.group(1))
+              cwd_match = re.search(r'(?m)^        working-directory: (.+)$', block)
+              cwd = cwd_match.group(1).strip() if cwd_match else '.'
+              print(f'::group::{name}')
+              subprocess.run(['bash', '-euo', 'pipefail', '-c', script], cwd=cwd, check=True)
+              print('::endgroup::')
+              executed += 1
+          if executed < 5:
+              raise SystemExit(f'Expected at least 5 build scripts, executed {executed}')
+          PY
+
+      - name: Upload fixed jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: MekaJarvis-Forge-1.20.1-0.1.1
+          path: |
+            MekaJarvis-Forge-1.20.1/build/libs/MekaJarvis-Forge-1.20.1-0.1.1.jar
+            MekaJarvis-Forge-1.20.1/build/libs/MekaJarvis-Forge-1.20.1-0.1.1.jar.sha256
+          if-no-files-found: error
+          retention-days: 1
